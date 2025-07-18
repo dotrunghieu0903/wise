@@ -287,7 +287,7 @@ if __name__ == "__main__":
         unique_media_dir_list = list(set(args.media_dir_list))
         setattr(args, 'media_dir_list', unique_media_dir_list)
 
-    assert all(Path(x).is_dir() for x in args.media_dir_list), "All values for media_dir_list must be directories"
+    # assert all(Path(x).is_dir() for x in args.media_dir_list), "All values for media_dir_list must be directories"
 
     # remove duplicate entries in feature extractor ids
     unique_video_feature_ids = list(set(args.video_feature_id_map))
