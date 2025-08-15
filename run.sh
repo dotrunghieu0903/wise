@@ -85,3 +85,5 @@ python media-metadata.py import --metadata-id "wikimedia-commons-25" --from-csv 
 # python create-index.py --project-dir wise-projects/Wikimedia-Commons-25/ --fts-config wise-projects/Wikimedia-Commons-25/fts_config.json
 
 python search.py --queries-from wise-data/wikimedia-commons-25/sample_queries.csv --in video --topk 100 --index-type IndexFlatIP --result-format csv --save-to-file wise-test/exhaustive-wikimedia-commons-25.csv --project-dir wise-projects/Wikimedia-Commons-25
+
+python search.py --queries-from wise-data/wikimedia-commons-25/sample_queries.csv --in video --topk 100 --index-type IndexIVFFlat --result-format csv --save-to-file wise-test/ann-wikimedia-commons-25.csv --project-dir wise-projects/Wikimedia-Commons-25
