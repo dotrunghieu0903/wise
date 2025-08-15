@@ -38,7 +38,7 @@ if __name__ == '__main__':
     parser.add_argument('--overwrite',
                         required=False,
                         action='store_true',
-                        default=False,
+                        default=True,
                         help='overwrite existing index file')
 
     parser.add_argument('--project-dir',

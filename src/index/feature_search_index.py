@@ -89,7 +89,9 @@ class FeatureSearchIndex(SearchIndex):
     def is_index_loaded(self):
         return hasattr(self, 'index')
 
-    def load_index(self, index_type, db_engine):
+    def load_index(self, index_type, db_engine=None):
+        if db_engine is None:
+            raise ValueError("db_engine is required to load feature index")
         self.index_type = index_type
         index_fn = self.get_index_filename(index_type)
         if not index_fn.exists():

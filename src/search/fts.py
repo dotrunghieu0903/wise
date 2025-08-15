@@ -156,16 +156,78 @@ def parse_fts_config(fts_config: dict):
     column2fts = defaultdict(dict)
     fts2column = defaultdict(dict)
     for table, fts_cols in fts_config.items():
-        for c in fts_cols:
+        # Support two schema styles:
+        # 1) { "metadata-...": ["col", "old:new", ...] }
+        # 2) { "metadata-..."|"metadata": { "fields": [{"name": "col", "searchable": true|false}, ...] } }
+        if isinstance(fts_cols, dict) and "fields" in fts_cols:
+            # take only searchable fields; default to True if flag missing
+            fields = [f for f in fts_cols.get("fields", []) if f.get("searchable", True)]
+            fts_cols_list = [f["name"] for f in fields if "name" in f]
+        else:
+            fts_cols_list = list(fts_cols)
+
+        for c in fts_cols_list:
             if ':' in c:
                 old_name, new_name = c.split(":", 1)
             else:
                 old_name, new_name = c, c
-            
+
             column2fts[table][old_name] = new_name
             fts2column[table][new_name] = old_name
     
     return column2fts, fts2column
+
+
+def normalize_fts_config(
+    extra_metadata_tables: dict[str, sa.Table], fts_config: dict
+) -> dict:
+    """
+    Normalize user-provided fts_config to the internal expected format:
+      { real_metadata_table_name: ["colA", "colB", "old:new", ...] }
+
+    - Accepts configs where values are dicts with a "fields" array, and reduces
+      to a plain list of (searchable) field names.
+    - If a config table name is not found in reflected metadata tables and there
+      is exactly one metadata table available, it maps the config to that table.
+    - Raises a clear error if the mapping cannot be resolved.
+    """
+    if not fts_config:
+        raise ValueError("fts_config is empty")
+
+    normalized: dict[str, list[str]] = {}
+
+    # Collect available table names for diagnostics
+    available_tables = list(extra_metadata_tables.keys())
+
+    for cfg_table_name, cfg_value in fts_config.items():
+        # Reduce any object schema to a list of columns using parse_fts_config
+        tmp_map, _ = parse_fts_config({cfg_table_name: cfg_value})
+        cfg_cols_map = tmp_map.get(cfg_table_name, {})
+        cfg_cols_as_renames = [
+            f"{old}:{new}" if old != new else old for old, new in cfg_cols_map.items()
+        ]
+
+        # Resolve the real table name
+        if cfg_table_name in extra_metadata_tables:
+            real_table = cfg_table_name
+        else:
+            if len(extra_metadata_tables) == 1:
+                # Single metadata table available; map config onto it
+                real_table = available_tables[0]
+            else:
+                raise ValueError(
+                    f"Config table '{cfg_table_name}' not found. Available metadata tables: {available_tables}"
+                )
+
+        # Merge columns if the table appears multiple times in config
+        existing = normalized.get(real_table, [])
+        # Maintain order and uniqueness
+        for item in cfg_cols_as_renames:
+            if item not in existing:
+                existing.append(item)
+        normalized[real_table] = existing
+
+    return normalized
 
 def get_metadata_selectable_from_fts5_config(
     extra_metadata_tables: dict[str, sa.Table], fts_config: dict
@@ -179,13 +241,20 @@ def get_metadata_selectable_from_fts5_config(
     # Based on the config, create a view and fts5 table pair
     from_clause = media_table
     columns = []
-    cols2fts, _ = parse_fts_config(fts_config)
+    # Ensure config keys map to real tables and to list of columns
+    normalized_config = normalize_fts_config(extra_metadata_tables, fts_config)
+    cols2fts, _ = parse_fts_config(normalized_config)
     for name, col2fts_map in cols2fts.items():
         m = extra_metadata_tables[name]
         from_clause = from_clause.join(
             m, m.c["media_id"] == media_table.c.id, isouter=True
         )
-        mcols = [ m.c[old_name].label(new_name) for old_name, new_name in col2fts_map.items() ]
+        # Only include columns that actually exist on the table
+        mcols = [
+            m.c[old_name].label(new_name)
+            for old_name, new_name in col2fts_map.items()
+            if old_name in m.c
+        ]
         columns.extend(mcols)
 
     if len(columns) == 0:

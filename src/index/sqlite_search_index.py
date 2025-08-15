@@ -88,7 +88,7 @@ class SqliteSearchIndex(SearchIndex):
     def is_index_loaded(self):
         return hasattr(self, 'index')
 
-    def load_index(self, index_type):
+    def load_index(self, index_type, db_engine=None):
         exists = self.sqlite_table_exists(self.metadata_db, self.metadata_table_fts)
 
         if self.sqlite_table_exists(self.metadata_db, self.metadata_table_fts):

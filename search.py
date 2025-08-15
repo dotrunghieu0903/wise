@@ -119,6 +119,13 @@ def process_query(search_index_list, args):
     return all_search_result
 
 def process_text_query(search_index_list, query_text, media_type, topk):
+    # If the requested media type wasn't preloaded or has no assets, return empty result gracefully
+    if media_type not in search_index_list:
+        return {
+            'match_filename_list': [],
+            'match_pts_list': [],
+            'match_score_list': [],
+        }
     if media_type == 'metadata':
         result = search_index_list[media_type].search(media_type,
                                                       query_text,
@@ -803,8 +810,13 @@ if __name__ == '__main__':
     ## load search assets
     search_index_list = {}
 
-    if args.query is None and args.media_type_list is None:
-        # load all search index as query is not decided yet (e.g. search console mode)
+    # Decide which media types to preload indices for
+    if args.queries_from is not None:
+        # When reading queries from a CSV, rows may reference different media types
+        # (including metadata in the not_in column). Preload all to avoid KeyError.
+        unique_required_media_type = list(project_assets.keys())
+    elif args.query is None and args.media_type_list is None:
+        # Load all indices if no inline queries or media types are specified
         unique_required_media_type = list(project_assets.keys())
     else:
         # load only the required search index
@@ -838,7 +850,7 @@ if __name__ == '__main__':
         asset_id = asset_id_list[asset_index]
         asset = project_assets[media_type][asset_id]
         search_index_list[media_type] = SearchIndexFactory(media_type, asset_id, asset)
-        if not search_index_list[media_type].load_index(args.index_type):
+        if not search_index_list[media_type].load_index(args.index_type, db_engine):
             print(f'failed to load {media_type} index: {asset_id}')
             del search_index_list[media_type]
             continue
